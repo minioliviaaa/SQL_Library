@@ -1,0 +1,109 @@
+1.complex data type
+Example_1: if you want to select array<int/...>
+Example_2: if you want to select array<string>
+Example_3: if you want to select array<string>
+2. popular time-related code
+calculate a date that is 7 days ago: date_sub
+created function dateToEpoch to convert current time to 13 digits unix time: dateToEpoch
+convert unix time to date: to_date
+1st date of last month: add_months
+extract year/month of date
+3. set null value as a variable 
+
+
+SOLUTIONS:
+1.complex data type
+
+* Example_1: if you want to select array<int/...>
+hive(u_kuwang) describe <table_name>
+functions  array<struct<id:int,name:string>>
+
+* Solutions:
+SELECT function_2_sk
+FROM foundation_core_entity_mp.dim_position
+lateral view explode(function.id) temp_tb AS function_2_sk
+LIMIT 5;
+
+* Example_2: if you want to select array<string>
+
+* Solutions:
+SELECT 
+    concat_ws(',',position.functions.name) AS function_2_name,
+    concat_ws(',',position.seniorities.name) AS seniority_2_name
+FROM foundation_core_entity_mp.dim_position
+LIMIT 5;
+
+* Example_3: if you want to select array<string>
+hive(u_kuwang) describe <table_name>
+locale_specific_names map<string,string>
+
+* Solutions:
+SELECT 
+    locale_specific_raw_data['en_US'].company_name AS current_company
+FROM foundation_core_entity_mp.dim_company
+LIMIT 5;
+
+2. popular time-related code
+calculate a date that is 7 days ago: date_sub
+* Solutions: 
+SELECT date_sub(current_date(),7);
+
+created function dateToEpoch to convert current time to 13 digits unix time: dateToEpoch
+* Solutions: 
+ADD jar ivy://com.linkedin.ds-udf:date-converter:4.+;
+CREATE TEMPORARY FUNCTION dateToEpoch AS 'com.linkedin.ds.udf.hive.date.DateFormatToEpoch'; 
+SELECT DISTINCT
+    CAST(REGEXP_EXTRACT(member_id, '([0-9]+)', 1) AS BIGINT) member_id,
+    1 AS Dynamo_scrub
+FROM enterprise_crm_mp.dim_crm_lead
+WHERE
+1=1
+AND (
+(lts_demand_funnel_stage LIKE '%Not Actionable%' AND lastmodified_date > dateToEpoch(date_sub(current_date,30),'YYYY-MM-DD','America/Los_Angeles'))
+OR
+(lts_demand_funnel_stage LIKE '%Future%' AND lastmodified_date > dateToEpoch(date_sub(current_date,60),'YYYY-MM-DD','America/Los_Angeles'))
+)
+AND length(member_id) <= 13
+;
+
+convert unix time to date: to_date
+* Solutions: 
+SELECT
+    seat_id,
+    to_date(from_unixtime(cast(month_start_time/1000 AS bigint))) AS month_begin
+FROM foundation_lts_mp.agg_monthly_cap_activity
+;
+
+1st date of last month: add_months
+* Solutions:  
+SELECT
+    cap_seat.seat_id,
+    CASE WHEN SUM(inmails_sent) > 0 THEN CAST((SUM(inmails_accepted) + SUM(inmails_declined)) * 100 AS DECIMAL(10, 2)) / SUM(inmails_sent)
+    ELSE 0
+    END AS inmail_response_rate
+FROM foundation_lts_mp.dim_cap_seat AS cap_seat
+LEFT JOIN monthly_cap_activity AS cap_activity
+    ON cap_seat.seat_id = cap_activity.seat_id
+WHERE
+    1 = 1
+    AND cap_activity.month_begin = add_months(trunc(CURRENT_TIMESTAMP,'MM'),-1) 
+    AND cap_seat.seat_id > 0
+GROUP BY cap_seat.seat_id
+;
+ 
+extract year/month of date
+* Solutions:  
+SELECT concat(year(current_date));
+SELECT concat(month(current_date));
+
+3. set null value as a variable 
+* Solutions:  
+
+Hive is different with TD, TD has default data type when you create a null as a variable, in hive, you need to set the data type by use cast(), when you want to create a null as a variable.
+CREATE TABLE temp_table AS
+SELECT
+    member_id,
+    cast(null as bigint) as opportunity_id,
+    cast(null as bigint) as opp_owner_id
+FROM <table-name>
+;
